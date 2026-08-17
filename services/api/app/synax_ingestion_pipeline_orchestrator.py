@@ -11,7 +11,7 @@ from services.api.app.synax_ingestion_pipeline import (
     download_wikidata_entities,
     download_openalex,
 )
-from services.api.app.synax_wikipedia_arkiv_domain_keywords import (
+from services.api.app.synax_wikipedia_arxiv_domain_keywords import (
     wikipedia_keywords,
     arxiv_keywords,
 )
@@ -23,28 +23,10 @@ from services.api.app.synax_wikidata_openalex_domain_keywords import (
     wikidata_keywords,
     openalex_keywords,
 )
-from services.api.app.synax_entity_extraction import (
-    run_entity_extraction,
-)
-from services.api.app.synax_coref_reso_entity_linking import (
-    run_coref_reso_entity_linking,
-)
-from services.api.app.synax_relationship_extraction import (
-    run_relationship_extraction,
-)
-from services.api.app.synax_knowledge_graph import (
-    run_knowledge_graph,
-)
-from services.api.app.synax_embedding_generation import (
-    run_embedding_generation,
-)
-from services.api.app.synax_ingestion_helper_functions import (
-    is_ingestion_enabled,
-)
-from services.api.app.synax_observability import (
-    log_event,
-)
-
+from services.api.app.synax_knowledge_graph import run_knowledge_graph
+from services.api.app.synax_gpu_controller import run_gpu_job
+from services.api.app.synax_ingestion_helper_functions import is_ingestion_enabled
+from services.api.app.synax_observability import log_event
 
 ingestion_wakeup_event = asyncio.Event()
 
@@ -100,9 +82,7 @@ async def _run_source_ingestion() -> bool:
         return False
 
     try:
-        await download_wikipedia_articles(
-            wikipedia_keywords
-        )
+        await download_wikipedia_articles(wikipedia_keywords)
 
     except asyncio.CancelledError:
         raise
@@ -155,9 +135,7 @@ async def _run_source_ingestion() -> bool:
         return False
 
     try:
-        await download_clinicaltrials(
-            clinical_trial_keywords
-        )
+        await download_clinicaltrials(clinical_trial_keywords)
 
     except asyncio.CancelledError:
         raise
@@ -179,9 +157,7 @@ async def _run_source_ingestion() -> bool:
         return False
 
     try:
-        await download_pubmed_articles(
-            pubmed_keywords
-        )
+        await download_pubmed_articles(pubmed_keywords)
 
     except asyncio.CancelledError:
         raise
@@ -203,9 +179,7 @@ async def _run_source_ingestion() -> bool:
         return False
 
     try:
-        await download_wikidata_entities(
-            wikidata_keywords
-        )
+        await download_wikidata_entities(wikidata_keywords)
 
     except asyncio.CancelledError:
         raise
@@ -227,9 +201,7 @@ async def _run_source_ingestion() -> bool:
         return False
 
     try:
-        await download_openalex(
-            openalex_keywords
-        )
+        await download_openalex(openalex_keywords)
 
     except asyncio.CancelledError:
         raise
@@ -262,91 +234,57 @@ async def run_ingestion_cycle() -> None:
     if not await _run_source_ingestion():
         return
 
-    if not await _run_sync_stage(
-        "entity_extraction",
-        run_entity_extraction,
-    ):
-        return
-
-    if not await _run_sync_stage(
-        "coref_reso_entity_linking",
-        run_coref_reso_entity_linking,
-    ):
-        return
-
-    if not await _run_sync_stage(
-        "relationship_extraction",
-        run_relationship_extraction,
-    ):
-        return
-
     if not await _ingestion_allowed():
         return
 
     log_event(
-        "parallel_processing_started",
+        "gpu_processing_requested",
         status="started",
         stages=[
-            "knowledge_graph",
+            "entity_extraction",
+            "coref_reso_entity_linking",
+            "relationship_extraction",
             "embedding_generation",
         ],
-    )
-
-    knowledge_graph_task = asyncio.create_task(
-        _run_sync_stage(
-            "knowledge_graph",
-            run_knowledge_graph,
-        ),
-        name="synax-knowledge-graph",
-    )
-
-    embedding_generation_task = asyncio.create_task(
-        _run_sync_stage(
-            "embedding_generation",
-            run_embedding_generation,
-        ),
-        name="synax-embedding-generation",
     )
 
     try:
-        knowledge_graph_result, embedding_result = await asyncio.gather(
-            knowledge_graph_task,
-            embedding_generation_task,
-            return_exceptions=True,
-        )
-
+        gpu_result = await run_gpu_job()
     except asyncio.CancelledError:
-        knowledge_graph_task.cancel()
-        embedding_generation_task.cancel()
-
-        await asyncio.gather(
-            knowledge_graph_task,
-            embedding_generation_task,
-            return_exceptions=True,
+        log_event(
+            "gpu_processing_cancelled",
+            status="cancelled",
         )
-
+        raise
+    except Exception as exc:
+        log_event(
+            "gpu_processing_failed",
+            status="failed",
+            error=str(exc),
+        )
         raise
 
-    if isinstance(
-        knowledge_graph_result,
-        Exception,
-    ):
-        raise knowledge_graph_result
-
-    if isinstance(
-        embedding_result,
-        Exception,
-    ):
-        raise embedding_result
+    if gpu_result != "COMPLETED":
+        log_event(
+            "gpu_processing_incomplete",
+            status="failed",
+            result=gpu_result,
+        )
+        return
 
     log_event(
-        "parallel_processing_completed",
+        "gpu_processing_completed",
         status="success",
-        stages=[
-            "knowledge_graph",
-            "embedding_generation",
-        ],
     )
+
+    if not await _ingestion_allowed():
+        return
+
+    if not await _run_sync_stage(
+        "knowledge_graph",
+        run_knowledge_graph,
+    ):
+        return
 
     if not await _ingestion_allowed():
         return
@@ -364,9 +302,7 @@ async def _wait_for_next_ingestion_cycle() -> None:
     )
 
     timer_task = asyncio.create_task(
-        asyncio.sleep(
-            UPDATE_INTERVAL_MINUTES * 60
-        ),
+        asyncio.sleep(UPDATE_INTERVAL_MINUTES * 60),
         name="synax-ingestion-timer",
     )
 
