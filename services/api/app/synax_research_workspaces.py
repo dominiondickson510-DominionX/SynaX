@@ -5,7 +5,6 @@ import uuid
 import hashlib
 import secrets
 import jwt
-import redis.asyncio as redis
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
@@ -30,6 +29,7 @@ from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from services.api.app.synax_config import redis_client
 
 load_dotenv()
 
@@ -49,11 +49,8 @@ engine: AsyncEngine = create_async_engine(
 AsyncSessionLocal = sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False
 )
-Base = declarative_base()
 
-redis_client = redis.from_url(
-    os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True
-)
+Base = declarative_base()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()

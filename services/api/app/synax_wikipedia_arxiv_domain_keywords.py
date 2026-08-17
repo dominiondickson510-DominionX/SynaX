@@ -1,4 +1,4 @@
-# services/api/app/synax_wikipedia_arkiv_domain_keywords.py
+# services/api/app/synax_wikipedia_arxiv_domain_keywords.py
 
 wikipedia_keywords = {
     "medicine": [

@@ -10,6 +10,7 @@ from neo4j import GraphDatabase
 from openai import AsyncOpenAI
 from google import genai
 from supermemory import AsyncSupermemory
+import redis.asyncio as redis
 
 load_dotenv()
 
@@ -33,6 +34,7 @@ FAISS_SHARD_DIR = os.path.join(DATA_DIR, "faiss_shards")
 UPDATE_INTERVAL_MINUTES = int(os.getenv("UPDATE_INTERVAL_MINUTES", "120"))
 INGESTION_ENABLED_KEY = "synax:ingestion:enabled"
 REDIS_URL = "redis://localhost:6379/0"
+redis_client = redis.from_url(REDIS_URL, decode_responses = True)
 WIKIDATA_CACHE_PATH = os.path.join(DATA_DIR, "wikidata_labels.json")
 BATCH_WRITE_SIZE = 4000
 

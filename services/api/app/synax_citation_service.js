@@ -1,4 +1,4 @@
-// services/citation/citation_service.js
+// services/api/app/synax_citation_service.js
 const express = require("express");
 const { Cite } = require("@citation-js/core");
 

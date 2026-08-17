@@ -13,7 +13,7 @@ from services.api.app.synax_config import (
     DATA_DIR,
     WIKI_LANG,
     WIKIDATA_CACHE_PATH,
-    REDIS_URL,
+    redis_client,
     INGESTION_ENABLED_KEY,
 )
 
@@ -611,21 +611,11 @@ def openalex_content_hash(document: dict) -> str:
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
-_redis_client: redis.Redis | None = None
-
-def get_redis() -> redis.Redis:
-    global _redis_client
-    if _redis_client is None:
-        _redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-    return _redis_client
-
 async def is_ingestion_enabled() -> bool:
-    r = get_redis()
-    val = await r.get(INGESTION_ENABLED_KEY)
-    if val is None:
+    value=await redis_client.get(INGESTION_ENABLED_KEY)
+    if value is None:
         return False
-    return val == "1"
+    return value.lower()=="true"
 
-async def set_ingestion_enabled(enabled: bool):
-    r = get_redis()
-    await r.set(INGESTION_ENABLED_KEY, "1" if enabled else "0")
+async def set_ingestion_enabled(enabled:bool)->None:
+    await redis_client.set(INGESTION_ENABLED_KEY,"true" if enabled else "false")

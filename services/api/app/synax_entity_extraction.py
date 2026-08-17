@@ -899,3 +899,6 @@ class EntityExtractionPipeline:
         print(
             f"\nEntity Extraction Complete\nDomains Processed: {total_domains}\nDocuments Processed: {total_documents}\nEntities Extracted: {total_entities}"
         )
+        
+def run_entity_extraction():
+    return EntityExtractionPipeline().process_dataset()
